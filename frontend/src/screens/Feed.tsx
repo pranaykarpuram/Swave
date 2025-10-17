@@ -9,7 +9,7 @@ import { Loader2, LogOut, User } from 'lucide-react';
 
 export const Feed = () => {
   const { queue, loading, fetchIfLow, consumeTop } = useFeedStore();
-  const { user, logout } = useAuthStore();
+  const { user, logout, isDemoMode } = useAuthStore();
   const toast = useUIStore((state) => state.toast);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -131,6 +131,11 @@ export const Feed = () => {
             <User className="w-5 h-5 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">
               {user?.display_name || user?.username}
+              {isDemoMode && (
+                <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                  Demo Mode
+                </span>
+              )}
             </span>
           </div>
           <Button
@@ -140,7 +145,7 @@ export const Feed = () => {
             className="flex items-center space-x-2"
           >
             <LogOut className="w-4 h-4" />
-            <span>Logout</span>
+            <span>{isDemoMode ? 'Exit Demo' : 'Logout'}</span>
           </Button>
         </div>
         <h1 className="text-2xl font-bold text-foreground">Discover</h1>

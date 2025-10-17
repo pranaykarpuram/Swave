@@ -8,12 +8,14 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isDemoMode: boolean;
   
   // Actions
   login: (credentials: LoginRequest) => Promise<void>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   loadProfile: () => Promise<void>;
+  enterDemoMode: () => void;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
 }
@@ -25,6 +27,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      isDemoMode: false,
 
       login: async (credentials: LoginRequest) => {
         set({ isLoading: true, error: null });
@@ -65,13 +68,17 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         set({ isLoading: true });
         try {
-          await api.auth.logout();
+          // Only call API logout if not in demo mode
+          if (!get().isDemoMode) {
+            await api.auth.logout();
+          }
         } catch (error) {
           console.error('Logout error:', error);
         } finally {
           set({ 
             user: null, 
             isAuthenticated: false, 
+            isDemoMode: false,
             isLoading: false 
           });
         }
@@ -93,6 +100,33 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false 
           });
         }
+      },
+
+      enterDemoMode: () => {
+        const demoUser: User = {
+          id: 999,
+          username: 'demo_user',
+          email: 'demo@swave.com',
+          display_name: 'Demo User',
+          date_joined: new Date().toISOString(),
+          profile: {
+            favorite_genres: ['pop', 'rock', 'electronic'],
+            favorite_artists: ['Demo Artist 1', 'Demo Artist 2'],
+            auto_play_previews: true,
+            swipe_sensitivity: 0.5,
+            total_swipes: 0,
+            total_likes: 0,
+            total_rejects: 0,
+          }
+        };
+        
+        set({ 
+          user: demoUser, 
+          isAuthenticated: true, 
+          isDemoMode: true,
+          isLoading: false,
+          error: null 
+        });
       },
 
       clearError: () => set({ error: null }),
