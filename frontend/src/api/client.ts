@@ -1,34 +1,203 @@
 /**
  * API Client
  * 
- * This module provides a type-safe wrapper around the mock API.
- * When you're ready to connect to your real backend, simply replace
- * the import statements to point to your actual API endpoints.
+ * This module provides a type-safe wrapper around the backend API.
+ * Includes authentication endpoints and token management.
  */
 
 import * as mocks from './mocks';
-import type { FeedResponse, Playlist, PlaylistDetail, AuthProvider } from './types';
+import type { 
+  FeedResponse, 
+  Playlist, 
+  PlaylistDetail, 
+  AuthProvider,
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+  User,
+  AuthTokens
+} from './types';
+
+// Base API URL - change this to your backend URL
+const API_BASE_URL = 'http://localhost:8000';
+
+// Token management
+const getStoredTokens = (): AuthTokens | null => {
+  const tokens = localStorage.getItem('auth_tokens');
+  return tokens ? JSON.parse(tokens) : null;
+};
+
+const setStoredTokens = (tokens: AuthTokens) => {
+  localStorage.setItem('auth_tokens', JSON.stringify(tokens));
+};
+
+const clearStoredTokens = () => {
+  localStorage.removeItem('auth_tokens');
+};
+
+// Helper function to make authenticated requests
+const makeAuthenticatedRequest = async (url: string, options: RequestInit = {}) => {
+  const tokens = getStoredTokens();
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (tokens?.access) {
+    headers['Authorization'] = `Bearer ${tokens.access}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    ...options,
+    headers,
+  });
+
+  // If token expired, try to refresh
+  if (response.status === 401 && tokens?.refresh) {
+    try {
+      const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: tokens.refresh }),
+      });
+
+      if (refreshResponse.ok) {
+        const { access } = await refreshResponse.json();
+        const newTokens = { ...tokens, access };
+        setStoredTokens(newTokens);
+        
+        // Retry original request with new token
+        headers['Authorization'] = `Bearer ${access}`;
+        return fetch(`${API_BASE_URL}${url}`, {
+          ...options,
+          headers,
+        });
+      }
+    } catch (error) {
+      // Refresh failed, clear tokens
+      clearStoredTokens();
+      throw new Error('Authentication failed');
+    }
+  }
+
+  return response;
+};
 
 export const api = {
+  // Authentication endpoints
+  auth: {
+    register: async (data: RegisterRequest): Promise<AuthResponse> => {
+      console.log('Sending registration data:', data);
+      const response = await fetch(`${API_BASE_URL}/auth/register/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      console.log('Registration response status:', response.status);
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Registration error:', error);
+        
+        // Handle Django validation errors
+        if (error.password) {
+          throw new Error(`Password: ${error.password.join(', ')}`);
+        }
+        if (error.email) {
+          throw new Error(`Email: ${error.email.join(', ')}`);
+        }
+        if (error.username) {
+          throw new Error(`Username: ${error.username.join(', ')}`);
+        }
+        
+        throw new Error(error.detail || error.message || 'Registration failed');
+      }
+      
+      const result = await response.json();
+      setStoredTokens(result.tokens);
+      return result;
+    },
+
+    login: async (data: LoginRequest): Promise<AuthResponse> => {
+      const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Login error:', error);
+        throw new Error(error.detail || error.message || 'Login failed');
+      }
+      
+      const result = await response.json();
+      setStoredTokens(result.tokens);
+      return result;
+    },
+
+    logout: async (): Promise<void> => {
+      const tokens = getStoredTokens();
+      if (tokens?.refresh) {
+        try {
+          await fetch(`${API_BASE_URL}/auth/logout/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh: tokens.refresh }),
+          });
+        } catch (error) {
+          console.error('Logout error:', error);
+        }
+      }
+      clearStoredTokens();
+    },
+
+    getProfile: async (): Promise<User> => {
+      const response = await makeAuthenticatedRequest('/auth/profile/');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+      
+      return response.json();
+    },
+
+    updateProfile: async (data: Partial<User>): Promise<User> => {
+      const response = await makeAuthenticatedRequest('/auth/profile/update/', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+      
+      return response.json();
+    },
+
+    // Future OAuth integration
+    connectProvider: async (provider: AuthProvider): Promise<{ ok: true }> => 
+      mocks.mockAuthConnect(provider),
+    refreshTaste: async (): Promise<{ ok: true }> => mocks.mockRefreshTaste(),
+  },
+
+  // Feed endpoints
   feed: {
     getNext: (): Promise<FeedResponse> => mocks.mockFetchNextFeed(),
   },
   
+  // Event endpoints
   events: {
     save: (trackId: string, type: 'like' | 'reject'): Promise<void> => 
       mocks.mockSaveEvent(trackId, type),
   },
   
+  // Playlist endpoints
   playlists: {
     list: (): Promise<Playlist[]> => mocks.mockListPlaylists(),
     get: (id: string): Promise<PlaylistDetail> => mocks.mockGetPlaylist(id),
     generateDaily: (): Promise<PlaylistDetail> => mocks.mockGenerateDailyPlaylist(),
     export: (id: string): Promise<{ ok: true }> => mocks.mockExportPlaylist(id),
-  },
-  
-  auth: {
-    connect: (provider: AuthProvider): Promise<{ ok: true }> => 
-      mocks.mockAuthConnect(provider),
-    refreshTaste: (): Promise<{ ok: true }> => mocks.mockRefreshTaste(),
   },
 };
