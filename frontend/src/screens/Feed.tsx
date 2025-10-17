@@ -1,17 +1,29 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useFeedStore } from '@/store/feed';
 import { useUIStore } from '@/store/ui';
+import { useAuthStore } from '@/store/auth';
 import { api } from '@/api/client';
 import { SwipeCard } from '@/components/SwipeCard';
-import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, LogOut, User } from 'lucide-react';
 
 export const Feed = () => {
   const { queue, loading, fetchIfLow, consumeTop } = useFeedStore();
+  const { user, logout } = useAuthStore();
   const toast = useUIStore((state) => state.toast);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast('Logged out successfully');
+    } catch (error) {
+      toast('Error logging out');
+    }
+  };
 
   useEffect(() => {
     fetchIfLow();
@@ -113,7 +125,24 @@ export const Feed = () => {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="p-6 text-center">
+      <header className="p-6 text-center border-b border-border">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <User className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              {user?.display_name || user?.username}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center space-x-2"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </Button>
+        </div>
         <h1 className="text-2xl font-bold text-foreground">Discover</h1>
       </header>
 
