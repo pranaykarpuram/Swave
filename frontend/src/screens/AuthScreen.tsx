@@ -13,7 +13,9 @@ export const AuthScreen = () => {
 
   // Try to load profile on mount (if tokens exist)
   useEffect(() => {
-    loadProfile();
+    loadProfile().catch((error) => {
+      console.warn('Failed to load profile on mount:', error);
+    });
   }, [loadProfile]);
 
   const switchMode = (newMode: AuthMode) => {
