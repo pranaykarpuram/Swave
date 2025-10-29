@@ -13,6 +13,14 @@ from .serializers import (
 )
 from .models import User
 
+# Try to import Firebase, fallback gracefully if not configured
+try:
+    from .firebase_config import verify_firebase_token
+    FIREBASE_ENABLED = True
+except ImportError:
+    FIREBASE_ENABLED = False
+    print("Firebase Admin not configured")
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -111,4 +119,51 @@ def logout(request):
         return Response({'message': 'Successfully logged out'})
     except Exception as e:
         return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_firebase_token_view(request):
+    """Verify Firebase ID token and return Django JWT tokens"""
+    firebase_token = request.data.get('firebase_token')
+    if not firebase_token:
+        return Response({'error': 'Firebase token required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if not FIREBASE_ENABLED:
+        return Response({'error': 'Firebase verification not configured'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    
+    decoded_token = verify_firebase_token(firebase_token)
+    if not decoded_token:
+        return Response({'error': 'Invalid Firebase token'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    # Get user email from Firebase token
+    firebase_uid = decoded_token.get('uid')
+    email = decoded_token.get('email')
+    
+    if not email:
+        return Response({'error': 'No email in Firebase token'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Get or create Django user
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        # Create user if doesn't exist
+        username = email.split('@')[0]  # Use email prefix as username
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            display_name=email.split('@')[0]
+        )
+        from .models import UserProfile
+        UserProfile.objects.create(user=user)
+    
+    # Return Django JWT tokens
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'user': UserSerializer(user).data,
+        'tokens': {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        }
+    })
 

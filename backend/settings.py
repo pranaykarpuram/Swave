@@ -77,12 +77,23 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# For now, we'll use SQLite locally
+# For production/team sharing, you can switch to:
+# - Firebase Firestore (easiest)
+# - PostgreSQL on Heroku/AWS (most secure)
+# - SQLite with shared network location (not recommended)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# TODO: For team sharing, consider:
+# 1. Firestore (easy setup, already using Firebase)
+# 2. PostgreSQL on Heroku (free tier available)
+# 3. AWS RDS (production-ready)
 
 
 # Password validation

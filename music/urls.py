@@ -6,7 +6,8 @@ from .views import (
     refresh_token, 
     profile, 
     update_profile, 
-    logout
+    logout,
+    verify_firebase_token_view
 )
 
 urlpatterns = [
@@ -17,6 +18,7 @@ urlpatterns = [
     path("auth/login/", login_view, name="login"),
     path("auth/refresh/", refresh_token, name="refresh"),
     path("auth/logout/", logout, name="logout"),
+    path("auth/verify-firebase/", verify_firebase_token_view, name="verify_firebase"),
     
     # User profile endpoints
     path("auth/profile/", profile, name="profile"),
