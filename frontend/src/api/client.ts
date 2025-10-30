@@ -194,8 +194,8 @@ export const api = {
           id: string | number;
           title: string;
           artist: string;
-          album_art_url?: string | null;
-          preview_url?: string | null;
+          album_art_url: string | null;
+          preview_url: string | null;
           provider?: string | null;
           provider_track_id?: string | null;
         }>;

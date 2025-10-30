@@ -22,8 +22,10 @@ def _attach_preview(t):
     res = itunes_song_search(f"{t['title']} {t['artist']}")
     if res:
         t["preview_url"] = res[0]["preview"]
+        t["album_art_url"] = res[0]["artwork"]
     else:
         t["preview_url"] = ""
+        t["album_art_url"] = ""
     return t
 
 def _normalize_min(t: dict) -> dict:
@@ -31,9 +33,12 @@ def _normalize_min(t: dict) -> dict:
         "id": t["id"],
         "title": t["title"],
         "artist": t["artist"],
+        "album_art_url": t.get("album_art_url", ""),
+        "preview_url": t.get("preview_url", "")
     }
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def feed_next(request):
     """
     If you pass ?liked=t1,t7,t12 it uses recommend_for_user().

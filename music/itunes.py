@@ -19,5 +19,6 @@ def itunes_song_search(query):
                 "track": song.get("trackName"),
                 "artist": song.get("artistName"),
                 "preview": song.get("previewUrl"),
+                "artwork": song.get("artworkUrl100") or song.get("artworkUrl60") or song.get("artworkUrl30") or ""
             })
     return results

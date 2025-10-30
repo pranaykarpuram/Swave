@@ -89,7 +89,7 @@ class UserProfile(models.Model):
 class Track(models.Model):
     title = models.CharField(max_length=255)
     artist = models.CharField(max_length=255)
-    album_art_url = models.URLField(blank=True, null=True)
+    album_art_url = models.URLField()
     preview_url = models.URLField()  
     provider = models.CharField(max_length=32, default="apple_music")
     provider_track_id = models.CharField(max_length=64, blank=True, null=True)
