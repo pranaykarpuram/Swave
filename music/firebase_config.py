@@ -1,46 +1,52 @@
 """
-Firebase Admin SDK configuration
+Firebase Admin SDK configuration (env-based, no secrets in repo)
 """
+import os
+import json
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
-import os
 
-# Initialize Firebase Admin SDK
-# We'll use environment variables for production, but for now use service account
-# or default credentials
-try:
-    # Try to get existing app
-    app = firebase_admin.get_app()
-except ValueError:
-    # App doesn't exist, initialize it
+
+def _init_firebase_admin_if_available() -> bool:
+    """Initialize Firebase Admin if env provides credentials. Returns True if initialized."""
     try:
-        # Option 1: If you have a service account key file
-        cred_path = os.path.join(os.path.dirname(__file__), '..', 'firebase-service-account-key.json')
-        if os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
+        firebase_admin.get_app()
+        return True
+    except ValueError:
+        pass
+
+    # Preferred: GOOGLE_APPLICATION_CREDENTIALS points to a JSON file
+    gac = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    # Alternative: FIREBASE_CREDENTIALS_JSON contains the JSON string
+    creds_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+
+    try:
+        if gac and os.path.exists(gac):
+            cred = credentials.Certificate(gac)
             firebase_admin.initialize_app(cred)
-            print("Firebase Admin initialized with service account key")
-        else:
-            # Option 2: Use default credentials (for cloud deployment or local emulator)
-            # For development, we'll skip Firebase Admin verification
-            # and just use Django's authentication
-            print("Firebase Admin not configured - using Django authentication")
-            pass
-    except Exception as e:
-        print(f"Firebase Admin initialization failed: {e}")
-        print("Continuing without Firebase Admin - Django auth will be used")
+            return True
+        if creds_json:
+            data = json.loads(creds_json)
+            cred = credentials.Certificate(data)
+            firebase_admin.initialize_app(cred)
+            return True
+    except Exception:
+        # Fail closed: if credentials are malformed, don't initialize
+        return False
 
-def verify_firebase_token(id_token):
-    """
-    Verify a Firebase ID token
-    
-    Returns:
-        dict: Decoded token if valid, None if invalid
-    """
+    # Not configured
+    return False
+
+
+FIREBASE_ADMIN_READY = _init_firebase_admin_if_available()
+
+
+def verify_firebase_token(id_token: str):
+    """Verify a Firebase ID token. Returns decoded dict if valid, else None."""
+    if not FIREBASE_ADMIN_READY:
+        return None
     try:
-        decoded_token = firebase_auth.verify_id_token(id_token)
-        return decoded_token
-    except Exception as e:
-        print(f"Firebase token verification failed: {e}")
+        return firebase_auth.verify_id_token(id_token)
+    except Exception:
         return None
 

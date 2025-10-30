@@ -86,7 +86,7 @@ def swipe_event(request):
     track = next((t for t in ph.TRACKS if t["id"] == track_id), None)
 
     SwipeEvent.objects.create(
-        user_id=request.user.id,
+        user=request.user,
         track_ext_id=track_id,
         direction=direction,
         batch_id=data.get("batch_id"),

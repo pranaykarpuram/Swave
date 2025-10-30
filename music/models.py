@@ -89,14 +89,14 @@ class UserProfile(models.Model):
 class Track(models.Model):
     title = models.CharField(max_length=255)
     artist = models.CharField(max_length=255)
-    album_art_url = models.URLField()
-    preview_url = models.URLField()  
+    album_art_url = models.URLField(blank=True, null=True)
+    preview_url = models.URLField(blank=True, null=True)  
     provider = models.CharField(max_length=32, default="apple_music")
     provider_track_id = models.CharField(max_length=64, blank=True, null=True)
 
 class SwipeEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    user_id = models.CharField(max_length=128, blank=True, null=True)  
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="swipe_events", blank=True, null=True, db_index=True)
     track_ext_id = models.CharField(max_length=128)  
     direction = models.CharField(max_length=5)       
     batch_id = models.CharField(max_length=128, blank=True, null=True)
@@ -104,4 +104,4 @@ class SwipeEvent(models.Model):
     artist = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        indexes = [models.Index(fields=["user_id"]), models.Index(fields=["track_ext_id"])]
+        indexes = [models.Index(fields=["track_ext_id"])]
