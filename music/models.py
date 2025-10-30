@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.conf import settings
 import json
 
 
@@ -63,6 +64,20 @@ class ProviderToken(models.Model):
         return f"{self.user.username} - {self.provider}"
 
 
+class UserTrackLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='liked_tracks')
+    provider = models.CharField(max_length=32)  # 'spotify' | 'apple' | 'internal'
+    provider_track_id = models.CharField(max_length=128)
+    added_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = (('user', 'provider', 'provider_track_id'),)
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['provider', 'provider_track_id']),
+        ]
+
+
 class UserProfile(models.Model):
     """Extended user profile information"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -94,9 +109,15 @@ class Track(models.Model):
     provider = models.CharField(max_length=32, default="apple_music")
     provider_track_id = models.CharField(max_length=64, blank=True, null=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['provider', 'provider_track_id']),
+        ]
+        unique_together = (('provider', 'provider_track_id'),)
+
 class SwipeEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    user_id = models.CharField(max_length=128, blank=True, null=True)  
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipe_events', null=True, blank=True,)  
     track_ext_id = models.CharField(max_length=128)  
     direction = models.CharField(max_length=5)       
     batch_id = models.CharField(max_length=128, blank=True, null=True)
@@ -104,4 +125,4 @@ class SwipeEvent(models.Model):
     artist = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        indexes = [models.Index(fields=["user_id"]), models.Index(fields=["track_ext_id"])]
+        indexes = [models.Index(fields=["user"]), models.Index(fields=["track_ext_id"])]

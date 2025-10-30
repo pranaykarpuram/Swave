@@ -3,13 +3,24 @@ import { useAuthStore } from '@/store/auth';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { Button } from '@/components/ui/button';
-import { Loader2, Play } from 'lucide-react';
+import { Loader2, Play, Music2 } from 'lucide-react';
 
 type AuthMode = 'login' | 'register';
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8000';
+
+const handleConnectSpotify = () => {
+  window.location.assign(`${API_BASE}/auth/spotify/login`);
+};
 
 export const AuthScreen = () => {
   const [mode, setMode] = useState<AuthMode>('login');
   const { loadProfile, isLoading, enterDemoMode } = useAuthStore();
+
+  // spotify button state
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
 
   // Try to load profile on mount (if tokens exist)
   useEffect(() => {
@@ -18,6 +29,42 @@ export const AuthScreen = () => {
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
+  };
+
+  // Redirect to backend to kick off OAuth.
+  // Preferred: GET /api/spotify/authorize/ returns { url } to redirect to.
+  // Fallbacks: direct redirect to one of the common endpoints that does a 302.
+  const connectSpotify = async () => {
+    setSpotifyBusy(true);
+    setSpotifyError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/spotify/authorize/`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (res.ok) {
+        // try to parse { url }
+        let data: any = null;
+        try { data = await res.json(); } catch {}
+        if (data?.url) {
+          window.location.href = data.url; // full redirect to Spotify (via backend)
+          return;
+        }
+      }
+      // If no JSON {url}, try simple redirect endpoints
+      const fallbacks = [
+        '/api/spotify/connect/',
+        '/api/spotify/login/',
+        '/api/spotify/auth/',
+      ];
+      // pick the first fallback — backend should 302 to Spotify auth
+      window.location.href = `${API_BASE}${fallbacks[0]}`;
+    } catch (e: any) {
+      setSpotifyError("Couldn't start Spotify connection. Check API URL and endpoint wiring.");
+      setSpotifyBusy(false);
+    }
   };
 
   return (
@@ -41,8 +88,8 @@ export const AuthScreen = () => {
             ) : (
               <RegisterForm onSwitchToLogin={() => switchMode('login')} />
             )}
-            
-            {/* Demo Mode Button */}
+
+            {/* Divider */}
             <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -54,16 +101,34 @@ export const AuthScreen = () => {
                   </span>
                 </div>
               </div>
-              
+
+              {/* Connect Spotify */}
+              <Button
+                onClick={handleConnectSpotify}
+                disabled={spotifyBusy}
+                className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-neutral-900"
+              >
+                {spotifyBusy ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Music2 className="w-4 h-4 mr-2" />
+                )}
+                {spotifyBusy ? 'Opening Spotify…' : 'Connect with Spotify'}
+              </Button>
+              {spotifyError && (
+                <p className="text-xs text-red-300 mt-2 text-center">{spotifyError}</p>
+              )}
+
+              {/* Demo Mode Button */}
               <Button
                 onClick={enterDemoMode}
                 variant="outline"
-                className="w-full mt-4 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+                className="w-full mt-3 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
               >
                 <Play className="w-4 h-4 mr-2" />
                 Try Demo Mode
               </Button>
-              
+
               <p className="text-xs text-blue-200/70 text-center mt-2">
                 Skip login and explore the app
               </p>
