@@ -13,6 +13,14 @@ from .serializers import (
 )
 from .models import User
 
+from django.utils.timezone import now
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Track, SwipeEvent, Playlist, PlaylistItem
+from .serializers import TrackSerializer, SwipeSerializer, PlaylistSerializer
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -112,3 +120,76 @@ def logout(request):
     except Exception as e:
         return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
+
+# music stuff
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def swipe(request):
+    """Record a like/dislike for the logged-in user."""
+    data = request.data
+    track_data = data.get("track")
+    if not track_data:
+        return Response({"error": "Missing track"}, status=400)
+
+    track, _ = Track.objects.get_or_create(
+        external_id=track_data["external_id"],
+        defaults={
+            "title": track_data["title"],
+            "artist": track_data["artist"],
+            "preview_url": track_data["preview_url"],
+            "artwork": track_data.get("artwork", ""),
+            "source": track_data.get("source", "itunes"),
+            "duration_ms": track_data.get("duration_ms"),
+        }
+    )
+    # optional: light metadata refresh
+    for f in ["title","artist","preview_url","artwork","source","duration_ms"]:
+        val = track_data.get(f)
+        if val and getattr(track, f) != val:
+            setattr(track, f, val)
+    track.save()
+
+    ev = SwipeEvent.objects.create(
+        user=request.user,
+        track=track,
+        action=data.get("action", "like"),
+        played_ms=int(data.get("played_ms") or 0),
+    )
+    return Response(SwipeSerializer(ev).data, status=201)
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def likes(request):
+    qs = (SwipeEvent.objects
+          .filter(user=request.user, action="like")
+          .select_related("track")
+          .order_by("-created_at"))
+    return Response(SwipeSerializer(qs, many=True).data)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def build_daily_playlist(request):
+    """Create/refresh today's playlist from today's likes."""
+    today = now().date()
+    pl, _ = Playlist.objects.get_or_create(
+        user=request.user, date=today, defaults={"name": f"Daily {today.isoformat()}"}
+    )
+    pl.items.all().delete()
+    todays_likes = (SwipeEvent.objects
+                    .filter(user=request.user, action="like", created_at__date=today)
+                    .select_related("track")
+                    .order_by("created_at"))
+    for i, ev in enumerate(todays_likes):
+        PlaylistItem.objects.create(playlist=pl, track=ev.track, position=i)
+    return Response(PlaylistSerializer(pl).data, status=201)
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_daily_playlist(request):
+    today = now().date()
+    try:
+        pl = Playlist.objects.get(user=request.user, date=today)
+    except Playlist.DoesNotExist:
+        return Response({"error": "no daily playlist yet"}, status=404)
+    return Response(PlaylistSerializer(pl).data)

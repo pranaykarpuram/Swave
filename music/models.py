@@ -85,3 +85,53 @@ class UserProfile(models.Model):
     
     def __str__(self):
         return f"{self.user.username}'s Profile"
+
+
+# For music related data
+
+class Track(models.Model):
+    external_id = models.CharField(max_length=100, unique=True)
+    title = models.CharField(max_length=255)
+    artist = models.CharField(max_length=255)
+    preview_url = models.URLField()
+    artwork = models.URLField(blank=True, null=True)
+    source = models.CharField(max_length=50, default="itunes")
+    duration_ms = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.artist} - {self.title}"
+
+
+class SwipeEvent(models.Model):
+    ACTION_CHOICES = [
+        ('like', 'Like'),
+        ('dislike', 'Dislike'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipes')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='swipes')
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    played_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} {self.action}d {self.track.title}"
+
+
+class Playlist(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='playlists')
+    name = models.CharField(max_length=100)
+    date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.name}"
+
+
+class PlaylistItem(models.Model):
+    playlist = models.ForeignKey(Playlist, on_delete=models.CASCADE, related_name='items')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE)
+    position = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('playlist', 'track')

@@ -6,7 +6,13 @@ from .views import (
     refresh_token, 
     profile, 
     update_profile, 
-    logout
+    logout,
+
+    # music 
+    swipe,
+    likes, 
+    build_daily_playlist, 
+    get_daily_playlist
 )
 
 urlpatterns = [
@@ -21,4 +27,10 @@ urlpatterns = [
     # User profile endpoints
     path("auth/profile/", profile, name="profile"),
     path("auth/profile/update/", update_profile, name="update_profile"),
+
+    #music 
+    path("swipes/", swipe),
+    path("likes/", likes),
+    path("playlist/daily/build/", build_daily_playlist),
+    path("playlist/daily/", get_daily_playlist),
 ]
