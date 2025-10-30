@@ -16,8 +16,12 @@ def itunes_song_search(query):
     for song in data.get("results", []):
         if song.get("previewUrl"):
             results.append({
-                "track": song.get("trackName"),
+                "external_id": str(song.get("trackId")),
+                "title": song.get("trackName"),
                 "artist": song.get("artistName"),
-                "preview": song.get("previewUrl"),
+                "preview_url": song.get("previewUrl"),
+                "artwork": song.get("artworkUrl100"),
+                "source": "itunes",
+                "duration_ms": song.get("trackTimeMillis"),
             })
     return results
