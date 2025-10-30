@@ -6,7 +6,9 @@ from .views import (
     refresh_token, 
     profile, 
     update_profile, 
-    logout
+    logout,
+    feed_next,
+    swipe_event
 )
 
 urlpatterns = [
@@ -21,4 +23,8 @@ urlpatterns = [
     # User profile endpoints
     path("auth/profile/", profile, name="profile"),
     path("auth/profile/update/", update_profile, name="update_profile"),
+
+    # Track flow
+    path("api/feed/next", feed_next),
+    path("api/event/swipe", swipe_event),
 ]

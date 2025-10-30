@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import login
 from .itunes import itunes_song_search
+from .models import SwipeEvent, Track
 from .serializers import (
     UserRegistrationSerializer, 
     UserLoginSerializer, 
@@ -12,7 +13,79 @@ from .serializers import (
     UserWithProvidersSerializer
 )
 from .models import User
+from . import reccomendations as ph
+import random
 
+def _attach_preview(t):
+    if t.get("preview_url"):
+        return t
+    res = itunes_song_search(f"{t['title']} {t['artist']}")
+    if res:
+        t["preview_url"] = res[0]["preview"]
+        t["album_art_url"] = res[0]["artwork"]
+    else:
+        t["preview_url"] = ""
+        t["album_art_url"] = ""
+    return t
+
+def _normalize_min(t: dict) -> dict:
+    return {
+        "id": t["id"],
+        "title": t["title"],
+        "artist": t["artist"],
+        "album_art_url": t.get("album_art_url", ""),
+        "preview_url": t.get("preview_url", "")
+    }
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def feed_next(request):
+    """
+    If you pass ?liked=t1,t7,t12 it uses recommend_for_user().
+    otherwise it just returns a random batch from tracks.
+    """
+    k = int(request.query_params.get("k", 20))
+    liked = request.query_params.get("liked")
+
+    clips = []
+    if liked:
+        liked_ids = [s for s in liked.split(",") if s]
+        try:
+            recs, _ = ph.recommend_for_user(liked_ids, k=min(k, len(ph.TRACKS)))
+            rec_tracks = [_attach_preview(t) for _, t in recs]
+            clips = [_normalize_min(t) for t in rec_tracks]
+        except Exception:
+            clips = []
+
+    if not clips:
+        pool = list(ph.TRACKS)
+        random.shuffle(pool)
+        pool = [_attach_preview(t) for t in pool[:k]]  
+        clips = [_normalize_min(t) for t in pool]
+
+    return Response({"batch_id": None, "next_cursor": None, "clips": clips})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def swipe_event(request):
+    data = request.data or {}
+    track_id = data.get("track_id")
+    direction = data.get("direction")
+    if direction not in ("left", "right") or not track_id:
+        return Response({"error":"track_id and direction required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    from . import reccomendations as ph
+    track = next((t for t in ph.TRACKS if t["id"] == track_id), None)
+
+    SwipeEvent.objects.create(
+        user_id=request.user.id,
+        track_ext_id=track_id,
+        direction=direction,
+        batch_id=data.get("batch_id"),
+        title=(track or {}).get("title"),
+        artist=(track or {}).get("artist"),
+    )
+    return Response({"ok": True}, status=status.HTTP_201_CREATED)
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
