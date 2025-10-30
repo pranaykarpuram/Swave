@@ -97,14 +97,14 @@ class Track(models.Model):
     artist = models.CharField(max_length=255)
 
     # preview/audio + artwork
-    preview_url = models.URLField()
+    preview_url = models.URLField(blank=True, null=True)
     artwork = models.URLField(blank=True, null=True)
 
-    # provider/source metadata (merged from both branches)
+    # provider/source metadata
     source = models.CharField(max_length=50, default="itunes")
     duration_ms = models.IntegerField(blank=True, null=True)
 
-    # from main branch fields, mapped into ours so we don't lose them
+    # compatibility fields used across the app
     album_art_url = models.URLField(blank=True, null=True)
     provider = models.CharField(max_length=32, default="apple_music")
     provider_track_id = models.CharField(max_length=64, blank=True, null=True)

@@ -21,6 +21,7 @@ export const Feed = () => {
       await logout();
       toast('Logged out successfully');
     } catch (error) {
+      console.error('Logout error:', error);
       toast('Error logging out');
     }
   };

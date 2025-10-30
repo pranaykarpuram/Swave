@@ -2,9 +2,19 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/api/client';
 import type { User, LoginRequest, RegisterRequest } from '@/api/types';
+import { auth } from '@/lib/firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  getIdToken
+} from 'firebase/auth';
 
 interface AuthState {
   user: User | null;
+  firebaseUser: FirebaseUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -24,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
+      firebaseUser: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
@@ -32,15 +43,25 @@ export const useAuthStore = create<AuthState>()(
       login: async (credentials: LoginRequest) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.auth.login(credentials);
+          // Use Firebase to sign in (authentication)
+          const userCredential = await signInWithEmailAndPassword(
+            auth, 
+            credentials.email, 
+            credentials.password
+          );
+          // Firebase-first only: exchange ID token for Django JWT
+          const idToken = await getIdToken(userCredential.user, true);
+          const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
-            user: response.user, 
+            user: response.user,
+            firebaseUser: userCredential.user,
             isAuthenticated: true, 
             isLoading: false 
           });
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Login failed';
           set({ 
-            error: error instanceof Error ? error.message : 'Login failed',
+            error: errorMessage,
             isLoading: false 
           });
           throw error;
@@ -50,15 +71,25 @@ export const useAuthStore = create<AuthState>()(
       register: async (data: RegisterRequest) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await api.auth.register(data);
+          // Use Firebase to create user (authentication)
+          const userCredential = await createUserWithEmailAndPassword(
+            auth, 
+            data.email, 
+            data.password
+          );
+          // Firebase-first only: exchange ID token for Django JWT and upsert user
+          const idToken = await getIdToken(userCredential.user, true);
+          const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
-            user: response.user, 
+            user: response.user,
+            firebaseUser: userCredential.user,
             isAuthenticated: true, 
             isLoading: false 
           });
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Registration failed';
           set({ 
-            error: error instanceof Error ? error.message : 'Registration failed',
+            error: errorMessage,
             isLoading: false 
           });
           throw error;
@@ -68,15 +99,25 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         set({ isLoading: true });
         try {
+          // Sign out from Firebase
+          if (get().firebaseUser) {
+            await signOut(auth);
+          }
+          
           // Only call API logout if not in demo mode
           if (!get().isDemoMode) {
-            await api.auth.logout();
+            try {
+              await api.auth.logout();
+            } catch (error) {
+              console.error('API logout error:', error);
+            }
           }
         } catch (error) {
           console.error('Logout error:', error);
         } finally {
           set({ 
-            user: null, 
+            user: null,
+            firebaseUser: null,
             isAuthenticated: false, 
             isDemoMode: false,
             isLoading: false 
@@ -136,7 +177,8 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       partialize: (state) => ({ 
         user: state.user, 
-        isAuthenticated: state.isAuthenticated 
+        isAuthenticated: state.isAuthenticated,
+        isDemoMode: state.isDemoMode
       }),
     }
   )

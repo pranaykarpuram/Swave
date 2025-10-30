@@ -153,6 +153,24 @@ export const api = {
       clearStoredTokens();
     },
 
+    verifyFirebaseToken: async (firebaseToken: string): Promise<AuthResponse> => {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-firebase/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firebase_token: firebaseToken }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Firebase verification error:', error);
+        throw new Error(error.error || error.detail || 'Token verification failed');
+      }
+      
+      const result = await response.json();
+      setStoredTokens(result.tokens);
+      return result;
+    },
+
     getProfile: async (): Promise<User> => {
       const response = await makeAuthenticatedRequest('/auth/profile/');
       
