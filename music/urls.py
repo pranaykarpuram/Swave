@@ -7,7 +7,9 @@ from .views import (
     profile, 
     update_profile, 
     logout,
-    verify_firebase_token_view
+    verify_firebase_token_view,
+    feed_next,
+    swipe_event
 )
 
 urlpatterns = [
@@ -23,4 +25,8 @@ urlpatterns = [
     # User profile endpoints
     path("auth/profile/", profile, name="profile"),
     path("auth/profile/update/", update_profile, name="update_profile"),
+
+    # Track flow
+    path("api/feed/next", feed_next),
+    path("api/event/swipe", swipe_event),
 ]
