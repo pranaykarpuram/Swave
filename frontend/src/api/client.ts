@@ -182,16 +182,58 @@ export const api = {
     refreshTaste: async (): Promise<{ ok: true }> => mocks.mockRefreshTaste(),
   },
 
-  // Feed endpoints
   feed: {
-    getNext: (): Promise<FeedResponse> => mocks.mockFetchNextFeed(),
+    getNext: async (): Promise<FeedResponse> => {
+      const res = await fetch(`${API_BASE_URL}/api/feed/next`);
+      if (!res.ok) {
+        return mocks.mockFetchNextFeed();
+      }
+      const data = await res.json() as {
+        batch_id: string | null;
+        clips: Array<{
+          id: string | number;
+          title: string;
+          artist: string;
+          album_art_url?: string | null;
+          preview_url?: string | null;
+          provider?: string | null;
+          provider_track_id?: string | null;
+        }>;
+      };
+  
+      return {
+        batchId: data.batch_id ?? null,
+        tracks: data.clips.map(c => ({
+          id: String(c.id),
+          title: c.title,
+          artist: c.artist,
+          album: '', 
+          artworkUrl: c.album_art_url ?? '',
+          previewUrl: (c.preview_url ?? '') || null,
+        })),
+      };
+    },
   },
   
-  // Event endpoints
   events: {
-    save: (trackId: string, type: 'like' | 'reject'): Promise<void> => 
-      mocks.mockSaveEvent(trackId, type),
-  },
+    save: async (trackId: string, type: 'like' | 'reject'): Promise<void> => {
+      const body = JSON.stringify({
+        track_id: trackId,
+        direction: type === 'like' ? 'right' : 'left',
+        batch_id: null,
+      });
+  
+      const res = await makeAuthenticatedRequest(`/api/event/swipe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+  
+      if (!res.ok) {
+        console.error('swipe_event failed', res.status, await res.text().catch(() => ''));
+      }
+    },
+  },  
   
   // Playlist endpoints
   playlists: {
