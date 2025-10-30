@@ -3,13 +3,13 @@ import { persist } from 'zustand/middleware';
 import { api } from '@/api/client';
 import type { User, LoginRequest, RegisterRequest } from '@/api/types';
 import { auth } from '@/lib/firebase';
-import { firestoreService } from '@/lib/firestore';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut,
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
+  getIdToken
 } from 'firebase/auth';
 
 interface AuthState {
@@ -49,26 +49,9 @@ export const useAuthStore = create<AuthState>()(
             credentials.email, 
             credentials.password
           );
-          
-          // Get Django JWT tokens (for API authentication)
-          const response = await api.auth.login(credentials);
-          
-          // Try to load user data from Firestore (if exists)
-          try {
-            const firestoreUser = await firestoreService.getUser(userCredential.user.uid);
-            if (firestoreUser) {
-              set({ 
-                user: firestoreUser,
-                firebaseUser: userCredential.user,
-                isAuthenticated: true, 
-                isLoading: false 
-              });
-              return;
-            }
-          } catch (error) {
-            console.log('No Firestore data found, using Django data');
-          }
-          
+          // Firebase-first only: exchange ID token for Django JWT
+          const idToken = await getIdToken(userCredential.user, true);
+          const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
             user: response.user,
             firebaseUser: userCredential.user,
@@ -94,23 +77,9 @@ export const useAuthStore = create<AuthState>()(
             data.email, 
             data.password
           );
-          
-          // Create Django user (for API access)
-          const response = await api.auth.register(data);
-          
-          // Save user data to Firestore (shared across team)
-          await firestoreService.saveUser(userCredential.user.uid, {
-            id: response.user.id,
-            username: response.user.username,
-            email: response.user.email,
-            display_name: response.user.display_name,
-            date_joined: response.user.date_joined,
-            profile: response.user.profile,
-          });
-          
-          // Save profile to Firestore
-          await firestoreService.saveProfile(userCredential.user.uid, response.user.profile);
-          
+          // Firebase-first only: exchange ID token for Django JWT and upsert user
+          const idToken = await getIdToken(userCredential.user, true);
+          const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
             user: response.user,
             firebaseUser: userCredential.user,
