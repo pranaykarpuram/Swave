@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from .models import User, UserProfile, ProviderToken
+from .models import Track, SwipeEvent, Playlist, PlaylistItem
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
@@ -79,3 +80,27 @@ class UserWithProvidersSerializer(UserSerializer):
     
     class Meta(UserSerializer.Meta):
         fields = UserSerializer.Meta.fields + ('provider_tokens',)
+
+
+class TrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Track
+        fields = "__all__"
+
+class SwipeSerializer(serializers.ModelSerializer):
+    track = TrackSerializer()
+    class Meta:
+        model = SwipeEvent
+        fields = ("id", "track", "action", "played_ms", "created_at")
+
+class PlaylistItemSerializer(serializers.ModelSerializer):
+    track = TrackSerializer()
+    class Meta:
+        model = PlaylistItem
+        fields = ("track", "position")
+
+class PlaylistSerializer(serializers.ModelSerializer):
+    items = PlaylistItemSerializer(many=True, read_only=True)
+    class Meta:
+        model = Playlist
+        fields = ("id", "name", "date", "items", "created_at")
