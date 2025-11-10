@@ -7,7 +7,6 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signOut,
-  onAuthStateChanged,
   User as FirebaseUser,
   getIdToken
 } from 'firebase/auth';
@@ -43,13 +42,11 @@ export const useAuthStore = create<AuthState>()(
       login: async (credentials: LoginRequest) => {
         set({ isLoading: true, error: null });
         try {
-          // Use Firebase to sign in (authentication)
           const userCredential = await signInWithEmailAndPassword(
             auth, 
             credentials.email, 
             credentials.password
           );
-          // Firebase-first only: exchange ID token for Django JWT
           const idToken = await getIdToken(userCredential.user, true);
           const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
@@ -71,13 +68,11 @@ export const useAuthStore = create<AuthState>()(
       register: async (data: RegisterRequest) => {
         set({ isLoading: true, error: null });
         try {
-          // Use Firebase to create user (authentication)
           const userCredential = await createUserWithEmailAndPassword(
             auth, 
             data.email, 
             data.password
           );
-          // Firebase-first only: exchange ID token for Django JWT and upsert user
           const idToken = await getIdToken(userCredential.user, true);
           const response = await api.auth.verifyFirebaseToken(idToken);
           set({ 
@@ -99,21 +94,18 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         set({ isLoading: true });
         try {
-          // Sign out from Firebase
           if (get().firebaseUser) {
             await signOut(auth);
           }
-          
-          // Only call API logout if not in demo mode
           if (!get().isDemoMode) {
             try {
               await api.auth.logout();
             } catch (error) {
-              console.error('API logout error:', error);
+              // Ignore API errors on logout
             }
           }
         } catch (error) {
-          console.error('Logout error:', error);
+          // Ignore errors, still clear state
         } finally {
           set({ 
             user: null,
