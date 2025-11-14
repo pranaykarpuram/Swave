@@ -141,23 +141,6 @@ class SwipeEvent(models.Model):
         ('like', 'Like'),
         ('dislike', 'Dislike'),
     ]
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipes')
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='swipes')
-    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    played_ms = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.username} {self.action}d {self.track.title}"
-
-
-class SwipeEvent(models.Model):
-    ACTION_CHOICES = [
-        ('like', 'Like'),
-        ('dislike', 'Dislike'),
-    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipes')
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='swipes')
     action = models.CharField(max_length=10, choices=ACTION_CHOICES)
