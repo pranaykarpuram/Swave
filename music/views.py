@@ -49,6 +49,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.shortcuts import redirect
 
+from .spotify_playlist_export import create_spotify_playlist
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -63,6 +64,54 @@ def _demo_user(request):
     user, _ = User.objects.get_or_create(username="demo_spotify", defaults={"email": "demo@swave.local"})
     return user
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def spotify_test_playlist(request):
+    user = request.user
+
+    test_tracks = [
+        "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+        "spotify:track:3FAJ6O0NOHQV8Mc5Ri6ENp",
+    ]
+
+    from .spotify_playlist_export import create_spotify_playlist
+
+    playlist = create_spotify_playlist(
+        user=user,
+        name="Swave Test Playlist",
+        track_uris=test_tracks
+    )
+
+    return Response({
+        "ok": True,
+        "playlist_url": playlist["external_urls"]["spotify"],
+        "playlist_id": playlist["id"]
+    })
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def spotify_test_playlist_browser(request):
+    from .views import _demo_user
+    user = _demo_user(request)
+
+    from .spotify_playlist_export import create_spotify_playlist
+
+    test_tracks = [
+        "spotify:track:4uLU6hMCjMI75M1A2tKUQC",
+        "spotify:track:3FAJ6O0NOHQV8Mc5Ri6ENp",
+    ]
+
+    playlist = create_spotify_playlist(
+        user=user,
+        name="Swave Test Playlist (Browser)",
+        track_uris=test_tracks,
+    )
+
+    return Response({
+        "ok": True,
+        "playlist_url": playlist["external_urls"]["spotify"],
+        "playlist_id": playlist["id"]
+    })
 
 @api_view(["GET"])
 @permission_classes([AllowAny])  # flip to IsAuthenticated after demo
