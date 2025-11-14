@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.conf import settings
 import json
 
 
@@ -63,6 +64,20 @@ class ProviderToken(models.Model):
         return f"{self.user.username} - {self.provider}"
 
 
+class UserTrackLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='liked_tracks')
+    provider = models.CharField(max_length=32)  # 'spotify' | 'apple' | 'internal'
+    provider_track_id = models.CharField(max_length=128)
+    added_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = (('user', 'provider', 'provider_track_id'),)
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['provider', 'provider_track_id']),
+        ]
+
+
 class UserProfile(models.Model):
     """Extended user profile information"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -111,8 +126,30 @@ class Track(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['provider', 'provider_track_id']),
+        ]
+        unique_together = (('provider', 'provider_track_id'),)
+
     def __str__(self):
         return f"{self.artist} - {self.title}"
+
+class SwipeEvent(models.Model):
+    ACTION_CHOICES = [
+        ('like', 'Like'),
+        ('dislike', 'Dislike'),
+    ]
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipes')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='swipes')
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    played_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} {self.action}d {self.track.title}"
 
 
 class SwipeEvent(models.Model):

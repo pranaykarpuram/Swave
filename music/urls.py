@@ -18,6 +18,11 @@ from .views import (
     # feed / recommendation style
     feed_next,
     swipe_event,
+
+    # spotify related
+    spotify_login,
+    spotify_callback,
+    spotify_sync_likes,
 )
 
 urlpatterns = [
@@ -43,4 +48,9 @@ urlpatterns = [
     # Track feed for each user
     path("api/feed/next", feed_next),
     path("api/event/swipe", swipe_event),
+
+    # spotify
+    path("auth/spotify/login", spotify_login, name="spotify_login"),
+    path("auth/spotify/callback", spotify_callback, name="spotify_callback"),
+    path("api/spotify/sync-likes", spotify_sync_likes, name="spotify_sync_likes"),
 ]
