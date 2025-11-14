@@ -30,3 +30,10 @@ __pycache__/
 venv/
 .env
 db.sqlite3
+
+# Virtual environments
+.venv/
+backend/.venv/
+
+# Local database
+db.sqlite3
