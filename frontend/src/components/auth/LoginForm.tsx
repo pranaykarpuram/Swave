@@ -13,7 +13,7 @@ interface LoginFormProps {
 
 export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -53,13 +53,13 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
           )}
           
           <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
-              id="username"
-              type="text"
-              value={formData.username}
-              onChange={(e) => handleInputChange('username', e.target.value)}
-              placeholder="Enter your username"
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="Enter your email"
               required
               disabled={isLoading}
             />

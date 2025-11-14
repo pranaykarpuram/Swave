@@ -1,10 +1,3 @@
-/**
- * API Client
- * 
- * This module provides a type-safe wrapper around the backend API.
- * Includes authentication endpoints and token management.
- */
-
 import * as mocks from './mocks';
 import type { 
   FeedResponse, 
@@ -88,19 +81,14 @@ export const api = {
   // Authentication endpoints
   auth: {
     register: async (data: RegisterRequest): Promise<AuthResponse> => {
-      console.log('Sending registration data:', data);
       const response = await fetch(`${API_BASE_URL}/auth/register/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       
-      console.log('Registration response status:', response.status);
       if (!response.ok) {
         const error = await response.json();
-        console.error('Registration error:', error);
-        
-        // Handle Django validation errors
         if (error.password) {
           throw new Error(`Password: ${error.password.join(', ')}`);
         }
@@ -128,7 +116,6 @@ export const api = {
       
       if (!response.ok) {
         const error = await response.json();
-        console.error('Login error:', error);
         throw new Error(error.detail || error.message || 'Login failed');
       }
       
@@ -151,6 +138,23 @@ export const api = {
         }
       }
       clearStoredTokens();
+    },
+
+    verifyFirebaseToken: async (firebaseToken: string): Promise<AuthResponse> => {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-firebase/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firebase_token: firebaseToken }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || error.detail || 'Token verification failed');
+      }
+      
+      const result = await response.json();
+      setStoredTokens(result.tokens);
+      return result;
     },
 
     getProfile: async (): Promise<User> => {
@@ -230,7 +234,7 @@ export const api = {
       });
   
       if (!res.ok) {
-        console.error('swipe_event failed', res.status, await res.text().catch(() => ''));
+        // Swipe events are non-critical, fail silently
       }
     },
   },  
