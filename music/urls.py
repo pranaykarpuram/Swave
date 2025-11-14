@@ -11,7 +11,9 @@ from .views import (
     swipe_event,
     spotify_login,
     spotify_callback,
-    spotify_sync_likes,
+    spotify_sync_likes, 
+    spotify_test_playlist,
+    spotify_test_playlist_browser,
 )
 
 urlpatterns = [
@@ -35,4 +37,7 @@ urlpatterns = [
     path("auth/spotify/login", spotify_login, name="spotify_login"),
     path("auth/spotify/callback", spotify_callback, name="spotify_callback"),
     path("api/spotify/sync-likes", spotify_sync_likes, name="spotify_sync_likes"),
+    path("spotify/test-playlist/", spotify_test_playlist),
+    path("spotify/test-playlist-browser/", spotify_test_playlist_browser),
+
 ]
