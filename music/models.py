@@ -90,24 +90,26 @@ class UserProfile(models.Model):
 # Music-related data models
 
 class Track(models.Model):
-    # external_id = ID from the iTunes API
-    external_id = models.CharField(max_length=100, unique=True)
+    # unique ID from itunes
+    provider_track_id = models.CharField(max_length=100, unique=True)
+
+    # which provider we got it from
+    provider = models.CharField(
+        max_length=32,
+        default="itunes",
+    )
 
     title = models.CharField(max_length=255)
     artist = models.CharField(max_length=255)
 
     # preview/audio + artwork
-    preview_url = models.URLField()
-    artwork = models.URLField(blank=True, null=True)
+    preview_url = models.URLField(blank=True, null=True)
+    
+    # album art
+    artwork_url = models.URLField(blank=True, null=True)
 
-    # provider/source metadata (merged from both branches)
-    source = models.CharField(max_length=50, default="itunes")
+    # track duration
     duration_ms = models.IntegerField(blank=True, null=True)
-
-    # from main branch fields, mapped into ours so we don't lose them
-    album_art_url = models.URLField(blank=True, null=True)
-    provider = models.CharField(max_length=32, default="apple_music")
-    provider_track_id = models.CharField(max_length=64, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
