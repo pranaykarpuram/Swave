@@ -36,9 +36,9 @@ class ProviderTokenAdmin(admin.ModelAdmin):
 # ---------------------------
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
-    list_display = ("title", "artist", "source", "created_at")
-    search_fields = ("title", "artist", "source")
-    list_filter = ("source",)
+    list_display = ("title", "artist", "provider", "created_at")
+    search_fields = ("title", "artist", "provider")
+    list_filter = ("provider",)
 
 @admin.register(SwipeEvent)
 class SwipeEventAdmin(admin.ModelAdmin):

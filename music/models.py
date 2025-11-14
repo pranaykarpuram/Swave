@@ -105,7 +105,7 @@ class UserProfile(models.Model):
 # Music-related data models
 
 class Track(models.Model):
-    # external_id = ID from the iTunes API
+    # external_id = ID from the iTunes API (or other provider)
     external_id = models.CharField(max_length=100, unique=True)
 
     title = models.CharField(max_length=255)
@@ -121,19 +121,20 @@ class Track(models.Model):
 
     # compatibility fields used across the app
     album_art_url = models.URLField(blank=True, null=True)
-    provider = models.CharField(max_length=32, default="apple_music")
+    provider = models.CharField(max_length=32, default="itunes")
     provider_track_id = models.CharField(max_length=64, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=['provider', 'provider_track_id']),
+            models.Index(fields=["provider", "provider_track_id"]),
         ]
-        unique_together = (('provider', 'provider_track_id'),)
+        unique_together = (("provider", "provider_track_id"),)
 
     def __str__(self):
         return f"{self.artist} - {self.title}"
+
 
 class SwipeEvent(models.Model):
     ACTION_CHOICES = [
