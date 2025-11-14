@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.conf import settings
 import json
 
 
@@ -63,6 +64,20 @@ class ProviderToken(models.Model):
         return f"{self.user.username} - {self.provider}"
 
 
+class UserTrackLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='liked_tracks')
+    provider = models.CharField(max_length=32)  # 'spotify' | 'apple' | 'internal'
+    provider_track_id = models.CharField(max_length=128)
+    added_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = (('user', 'provider', 'provider_track_id'),)
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['provider', 'provider_track_id']),
+        ]
+
+
 class UserProfile(models.Model):
     """Extended user profile information"""
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -90,31 +105,52 @@ class UserProfile(models.Model):
 # Music-related data models
 
 class Track(models.Model):
-    # unique ID from itunes
-    provider_track_id = models.CharField(max_length=100, unique=True)
-
-    # which provider we got it from
-    provider = models.CharField(
-        max_length=32,
-        default="itunes",
-    )
+    # external_id = ID from the iTunes API (or other provider)
+    external_id = models.CharField(max_length=100, unique=True)
 
     title = models.CharField(max_length=255)
     artist = models.CharField(max_length=255)
 
     # preview/audio + artwork
     preview_url = models.URLField(blank=True, null=True)
-    
-    # album art
-    artwork_url = models.URLField(blank=True, null=True)
+    artwork = models.URLField(blank=True, null=True)
 
-    # track duration
+    # provider/source metadata
+    source = models.CharField(max_length=50, default="itunes")
     duration_ms = models.IntegerField(blank=True, null=True)
+
+    # compatibility fields used across the app
+    album_art_url = models.URLField(blank=True, null=True)
+    provider = models.CharField(max_length=32, default="itunes")
+    provider_track_id = models.CharField(max_length=64, blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["provider", "provider_track_id"]),
+        ]
+        unique_together = (("provider", "provider_track_id"),)
+
     def __str__(self):
         return f"{self.artist} - {self.title}"
+
+
+class SwipeEvent(models.Model):
+    ACTION_CHOICES = [
+        ('like', 'Like'),
+        ('dislike', 'Dislike'),
+    ]
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='swipes')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='swipes')
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    played_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} {self.action}d {self.track.title}"
 
 
 class SwipeEvent(models.Model):

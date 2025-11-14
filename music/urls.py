@@ -7,6 +7,7 @@ from .views import (
     profile,
     update_profile,
     logout,
+    verify_firebase_token_view,
 
     # music / swipe / playlist
     swipe,
@@ -17,6 +18,11 @@ from .views import (
     # feed / recommendation style
     feed_next,
     swipe_event,
+
+    # spotify related
+    spotify_login,
+    spotify_callback,
+    spotify_sync_likes,
 )
 
 urlpatterns = [
@@ -27,7 +33,8 @@ urlpatterns = [
     path("auth/login/", login_view, name="login"),
     path("auth/refresh/", refresh_token, name="refresh"),
     path("auth/logout/", logout, name="logout"),
-
+    path("auth/verify-firebase/", verify_firebase_token_view, name="verify_firebase"),
+    
     # User profile
     path("auth/profile/", profile, name="profile"),
     path("auth/profile/update/", update_profile, name="update_profile"),
@@ -41,4 +48,9 @@ urlpatterns = [
     # Track feed for each user
     path("api/feed/next", feed_next),
     path("api/event/swipe", swipe_event),
+
+    # spotify
+    path("auth/spotify/login", spotify_login, name="spotify_login"),
+    path("auth/spotify/callback", spotify_callback, name="spotify_callback"),
+    path("api/spotify/sync-likes", spotify_sync_likes, name="spotify_sync_likes"),
 ]
