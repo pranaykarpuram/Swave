@@ -400,13 +400,24 @@ def feed_next(request):
     return Response({"batch_id": None, "next_cursor": None, "clips": clips})
 
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def swipe_event(request):
-    """Record a left/right swipe using relational Track rows."""
+    """
+    Record a swipe event. Will map direction->like/dislike and add the Track.
+
+    Body:
+    {
+        "track_id": "1440843974",
+        "direction": "right",  // "right" = like, "left" = dislike
+        "played_ms": 8000
+    }
+    """
     data = request.data or {}
     track_id = data.get("track_id")
     direction = data.get("direction")
+
     if direction not in ("left", "right") or not track_id:
         return Response(
             {"error": "track_id and direction required"},
@@ -415,22 +426,26 @@ def swipe_event(request):
 
     action = "like" if direction == "right" else "dislike"
 
-    # find track in the database by external_id OR provider ID
+    # Try to find the track by external_id OR provider_track_id
     track_obj = (
         Track.objects.filter(external_id=track_id).first()
         or Track.objects.filter(provider_track_id=track_id).first()
     )
 
-    if track_obj:
-        SwipeEvent.objects.create(
-            user=request.user,
-            track=track_obj,
-            action=action,
-            played_ms=int(data.get("played_ms") or 0),
+    if not track_obj:
+        return Response(
+            {"ok": False, "error": "Track not found to attach"},
+            status=status.HTTP_404_NOT_FOUND,
         )
 
-    return Response({"ok": True}, status=status.HTTP_201_CREATED)
+    SwipeEvent.objects.create(
+        user=request.user,
+        track=track_obj,
+        action=action,
+        played_ms=int(data.get("played_ms") or 0),
+    )
 
+    return Response({"ok": True}, status=status.HTTP_201_CREATED)
 
 # itunes test endpoint
 @api_view(["GET"])
@@ -595,41 +610,115 @@ def verify_firebase_token_view(request):
 @permission_classes([IsAuthenticated])
 def swipe(request):
     """
-    Record a like/dislike for the logged-in user using normalized Track rows.
-    Body should contain a 'track' object with external_id/title/artist/etc.
+    This is for recording a like/dislike for the logged-in user using normalized Track rows.
+    The body of the request should contain:
+    {
+        "action": "like" | "dislike",
+        "played_ms": 12000,
+        "track": {
+            "external_id": "1440843974",
+            "title": "Hotline Bling",
+            "artist": "Drake",
+            "preview_url": "https://....m4a",
+            "artwork": "https://...100x100bb.jpg",
+            "source": "itunes",
+            "duration_ms": 267024
+        }
+    }
     """
     data = request.data
     track_data = data.get("track")
     if not track_data:
         return Response({"error": "Missing track"}, status=400)
 
+    external_id = track_data["external_id"]
+    provider = track_data.get("source", "itunes")
+
+    # Get or create track keyed by external_id; also keep provider/provider_track_id in sync
     track, _ = Track.objects.get_or_create(
-        external_id=track_data["external_id"],
+        external_id=external_id,
         defaults={
             "title": track_data["title"],
             "artist": track_data["artist"],
             "preview_url": track_data.get("preview_url"),
             "artwork": track_data.get("artwork", ""),
-            "source": track_data.get("source", "itunes"),
+            "source": provider,
             "duration_ms": track_data.get("duration_ms"),
             "album_art_url": track_data.get("artwork", ""),
-            "provider_track_id": track_data.get("external_id", ""),
-        }
+            "provider": provider,
+            "provider_track_id": external_id,
+        },
     )
 
-    for f in ["title", "artist", "preview_url", "artwork", "source", "duration_ms", "album_art_url", "provider_track_id"]:
-        val = track_data.get(f) or (f == "album_art_url" and track_data.get("artwork"))
+    # Refresh fields if the payload has newer data
+    for f in [
+        "title",
+        "artist",
+        "preview_url",
+        "artwork",
+        "source",
+        "duration_ms",
+        "album_art_url",
+    ]:
+        val = track_data.get(f)
+        # For album_art_url, fall back to artwork in the payload
+        if f == "album_art_url":
+            val = track_data.get("artwork") or track_data.get("album_art_url")
         if val and getattr(track, f, None) != val:
             setattr(track, f, val)
+
+    # Keep provider + provider_track_id consistent
+    if track.provider != provider:
+        track.provider = provider
+    if track.provider_track_id != external_id:
+        track.provider_track_id = external_id
     track.save()
 
+    # Validate action
+    action = data.get("action", "like")
+    if action not in ("like", "dislike"):
+        return Response({"error": "invalid action"}, status=400)
+
+    # Create swipe event
     ev = SwipeEvent.objects.create(
         user=request.user,
         track=track,
-        action=data.get("action", "like"),
+        action=action,
         played_ms=int(data.get("played_ms") or 0),
     )
-    return Response(SwipeSerializer(ev).data, status=201)
+
+    # Update profile stats
+    profile = request.user.profile
+    profile.total_swipes += 1
+    if action == "like":
+        profile.total_likes += 1
+    else:
+        profile.total_rejects += 1
+    profile.save()
+
+    return Response(
+        {
+            "id": ev.id,
+            "user": request.user.username,
+            "action": ev.action,
+            "played_ms": ev.played_ms,
+            "track": {
+                "title": track.title,
+                "artist": track.artist,
+                "album_art_url": track.album_art_url,
+                "preview_url": track.preview_url,
+                "provider": track.provider,
+                "provider_track_id": track.provider_track_id,
+            },
+            "created_at": ev.created_at.isoformat(),
+            "profile_after": {
+                "total_swipes": profile.total_swipes,
+                "total_likes": profile.total_likes,
+                "total_rejects": profile.total_rejects,
+            },
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["GET"])

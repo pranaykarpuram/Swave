@@ -1,4 +1,3 @@
-
 # macOS
 .DS_Store
 
@@ -32,8 +31,13 @@ venv/
 db.sqlite3
 
 # Virtual environments
+venv/
 .venv/
 backend/.venv/
+
+# Env files
+.env
+.env.*
 
 # Local database
 db.sqlite3
