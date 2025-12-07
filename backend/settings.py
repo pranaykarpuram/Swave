@@ -92,6 +92,7 @@ DATABASES = {
 }
 
 WSGI_APPLICATION = 'backend.wsgi.application'
+FRONTEND_URL = "http://localhost:8080"  
 
 
 # Database

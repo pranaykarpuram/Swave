@@ -6,6 +6,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from .models import UserTrackLike, Track
+from django.shortcuts import redirect
+from django.conf import settings
+import math
+
+
+FRONTEND_URL = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
 from .itunes import itunes_song_search
 from .models import (
@@ -54,6 +61,80 @@ from .spotify_playlist_export import create_spotify_playlist
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API = "https://api.spotify.com/v1"
+
+
+import math
+
+# --- Genre + label quantification helpers ---
+
+GENRE_POSITION = {
+    # super rough axis: 0 = heavy/aggro, 1 = bright/mainstream-electronic-ish
+    "metal": 0.05,
+    "hard rock": 0.10,
+    "rock": 0.20,
+    "alt rock": 0.25,
+    "indie rock": 0.30,
+    "indie": 0.32,
+    "r&b": 0.35,
+    "hip hop": 0.38,
+    "rap": 0.40,
+    "trap": 0.42,
+    "emo rap": 0.43,
+    "latin": 0.45,
+    "k-pop": 0.48,
+    "pop": 0.50,
+    "dance pop": 0.55,
+    "edm": 0.65,
+    "house": 0.70,
+    "techno": 0.75,
+    "lofi": 0.30,
+    # default if nothing matches ~ middle-of-the-road
+}
+
+MAJOR_KEYWORDS = [
+    "universal", "sony", "warner", "atlantic", "columbia",
+    "republic", "rca", "def jam", "interscope", "island",
+]
+
+
+def compute_genre_position(genres):
+    """
+    Map a list of genre strings to a single scalar in [0,1].
+    We average over any genres we know, otherwise default 0.5.
+    """
+    if not genres:
+        return 0.5
+    vals = []
+    for g in genres:
+        low = g.lower()
+        # try exact match
+        if low in GENRE_POSITION:
+            vals.append(GENRE_POSITION[low])
+        else:
+            # fuzzy-ish: check if any known key is contained
+            for key, pos in GENRE_POSITION.items():
+                if key in low:
+                    vals.append(pos)
+                    break
+    if not vals:
+        return 0.5
+    return sum(vals) / len(vals)
+
+
+def compute_label_score(label: str) -> float:
+    """
+    1.0 = clearly major label
+    0.0 = indie/other
+    0.5 = unknown
+    """
+    if not label:
+        return 0.5
+    low = label.lower()
+    if any(k in low for k in MAJOR_KEYWORDS):
+        return 1.0
+    return 0.0
+
+
 
 def _demo_user(request):
     """
@@ -169,7 +250,7 @@ def spotify_callback(request):
             "scope": json.dumps(scopes),
         },
     )
-    return Response({"ok": True, "connected": True, "spotify_user_id": spotify_user_id})
+    return redirect(f"{FRONTEND_URL}/connect-spotify")
 
 def _ensure_access_token(user):
     tok = ProviderToken.objects.filter(user=user, provider="spotify").first()
@@ -210,6 +291,7 @@ def _upsert_saved_track(user, saved_item):
     Track.objects.update_or_create(
         provider="spotify", provider_track_id=tid,
         defaults={
+            "external_id": tid,
             "title": title,
             "artist": artists,
             "album_art_url": album_art,
@@ -602,3 +684,192 @@ def get_daily_playlist(request):
     except Playlist.DoesNotExist:
         return Response({"error": "no daily playlist yet"}, status=404)
     return Response(PlaylistSerializer(pl).data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])  # later: swap to IsAuthenticated
+def spotify_likes_debug(request):
+    """
+    Return user's liked Spotify tracks (from DB) + numeric metadata
+    we can use as a feature vector for recommendations.
+
+    For now, we compute features for the first 2 liked tracks using:
+    - track popularity (raw + scaled)
+    - explicit flag
+    - release year (raw + scaled)
+    - duration (raw ms + scaled)
+    - artist popularity (raw + scaled)
+    - artist followers (raw + scaled log)
+    - genre_position (scalar) from artist genres
+    - label_score (major vs indie-ish)
+    """
+    user = _demo_user(request)
+
+    # 1) Get liked tracks from our DB
+    likes_qs = (
+        UserTrackLike.objects
+        .filter(user=user, provider="spotify")
+        .order_by("-added_at")
+    )
+    likes = list(likes_qs[:20])  # cap for now
+
+    track_ids = [l.provider_track_id for l in likes]
+    tracks = Track.objects.filter(
+        provider="spotify",
+        provider_track_id__in=track_ids,
+    )
+    track_map = {t.provider_track_id: t for t in tracks}
+
+    track_items = []
+    for l in likes:
+        t = track_map.get(l.provider_track_id)
+        track_items.append({
+            "id": l.provider_track_id,
+            "title": getattr(t, "title", None),
+            "artist": getattr(t, "artist", None),
+            "album_art_url": getattr(t, "album_art_url", None),
+            "preview_url": getattr(t, "preview_url", None),
+            "added_at": l.added_at.isoformat() if l.added_at else None,
+        })
+
+    # 2) Build meta_features for the first 2 tracks via Spotify /tracks + /artists
+    meta_features = []
+    first_ids = track_ids[:2]
+
+    access = _ensure_access_token(user)
+    if access and first_ids:
+        headers = {"Authorization": f"Bearer {access}"}
+
+        # --- Fetch detailed track data ---
+        r_tracks = requests.get(
+            f"{SPOTIFY_API}/tracks",
+            headers=headers,
+            params={"ids": ",".join(first_ids)},
+            timeout=15,
+        )
+        print("DEBUG /tracks status:", r_tracks.status_code)
+        if r_tracks.status_code == 200:
+            tracks_data = r_tracks.json().get("tracks") or []
+
+            # Collect primary artist IDs for these tracks
+            artist_ids = []
+            for t in tracks_data:
+                artists = t.get("artists") or []
+                if artists:
+                    artist_ids.append(artists[0].get("id"))
+            # de-duplicate
+            artist_ids = [a for a in dict.fromkeys(artist_ids) if a]
+
+            artist_map = {}
+            if artist_ids:
+                r_artists = requests.get(
+                    f"{SPOTIFY_API}/artists",
+                    headers=headers,
+                    params={"ids": ",".join(artist_ids)},
+                    timeout=15,
+                )
+                print("DEBUG /artists status:", r_artists.status_code)
+                if r_artists.status_code == 200:
+                    for a in r_artists.json().get("artists") or []:
+                        if a and a.get("id"):
+                            artist_map[a["id"]] = a
+
+            # --- Build meta_features per track ---
+            for t in tracks_data:
+                if t is None:
+                    continue
+                tid = t.get("id")
+                if not tid:
+                    continue
+
+                # Track-level
+                popularity = t.get("popularity", 0) or 0
+                popularity_scaled = popularity / 100.0
+
+                explicit_flag = 1 if t.get("explicit") else 0
+
+                duration_ms = t.get("duration_ms") or 0
+                # assume 0–8 minutes window for scaling
+                max_duration_ms = 8 * 60 * 1000
+                duration_scaled = min(
+                    max(duration_ms / max_duration_ms, 0.0),
+                    1.0
+                )
+
+                # Album / year / label
+                album_obj = t.get("album") or {}
+                raw_date = album_obj.get("release_date")
+                release_year = None
+                release_year_scaled = None
+                if raw_date:
+                    try:
+                        release_year = int(raw_date.split("-")[0])
+                        base = 1960
+                        max_year = 2025
+                        ry = (release_year - base) / float(max_year - base)
+                        release_year_scaled = min(max(ry, 0.0), 1.0)
+                    except Exception:
+                        pass
+
+                label = album_obj.get("label") or ""
+                label_score = compute_label_score(label)
+
+                # Artist-level
+                artists = t.get("artists") or []
+                primary_artist = artists[0] if artists else None
+
+                artist_popularity_raw = None
+                artist_popularity_scaled = None
+                artist_followers_raw = None
+                artist_followers_scaled = None
+                genre_position = None
+                genres = []
+
+                if primary_artist and primary_artist.get("id"):
+                    aid = primary_artist["id"]
+                    a_data = artist_map.get(aid)
+                    if a_data:
+                        artist_popularity_raw = a_data.get("popularity", 0) or 0
+                        artist_popularity_scaled = artist_popularity_raw / 100.0
+
+                        followers_obj = a_data.get("followers") or {}
+                        artist_followers_raw = followers_obj.get("total") or 0
+                        # log-scale, assume ~10^7 as top-tier-ish
+                        artist_followers_scaled = (
+                            math.log10(artist_followers_raw + 1) / 7.0
+                        )
+
+                        genres = a_data.get("genres") or []
+                        genre_position = compute_genre_position(genres)
+
+                meta_features.append({
+                    "id": tid,
+
+                    # raw values
+                    "popularity_raw": popularity,
+                    "explicit": explicit_flag,
+                    "release_year": release_year,
+                    "duration_ms": duration_ms,
+                    "artist_popularity_raw": artist_popularity_raw,
+                    "artist_followers_raw": artist_followers_raw,
+                    "label": label or None,
+                    "genres": genres,
+
+                    # scaled / numeric vector fields
+                    "popularity_scaled": popularity_scaled,
+                    "is_explicit": float(explicit_flag),
+                    "release_year_scaled": release_year_scaled,
+                    "duration_scaled": duration_scaled,
+                    "artist_popularity_scaled": artist_popularity_scaled,
+                    "artist_followers_scaled": artist_followers_scaled,
+                    "genre_position": genre_position,
+                    "label_score": label_score,
+                })
+        else:
+            print("SPOTIFY /tracks error:", r_tracks.status_code, repr(r_tracks.text[:400]))
+
+    return Response({
+        "tracks": track_items,
+        "meta_features": meta_features,
+    })
+

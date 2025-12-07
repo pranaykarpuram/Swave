@@ -10,9 +10,7 @@ type AuthMode = 'login' | 'register';
 const API_BASE =
   (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8000';
 
-const handleConnectSpotify = () => {
-  window.location.assign(`${API_BASE}/auth/spotify/login`);
-};
+
 
 export const AuthScreen = () => {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -21,6 +19,8 @@ export const AuthScreen = () => {
   // spotify button state
   const [spotifyBusy, setSpotifyBusy] = useState(false);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
+
+
 
   // Try to load profile on mount (if tokens exist)
   useEffect(() => {
@@ -36,38 +36,12 @@ export const AuthScreen = () => {
   // Redirect to backend to kick off OAuth.
   // Preferred: GET /api/spotify/authorize/ returns { url } to redirect to.
   // Fallbacks: direct redirect to one of the common endpoints that does a 302.
-  const connectSpotify = async () => {
+  const connectSpotify = () => {
     setSpotifyBusy(true);
     setSpotifyError(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/spotify/authorize/`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' },
-      });
-
-      if (res.ok) {
-        // try to parse { url }
-        let data: any = null;
-        try { data = await res.json(); } catch {}
-        if (data?.url) {
-          window.location.href = data.url; // full redirect to Spotify (via backend)
-          return;
-        }
-      }
-      // If no JSON {url}, try simple redirect endpoints
-      const fallbacks = [
-        '/api/spotify/connect/',
-        '/api/spotify/login/',
-        '/api/spotify/auth/',
-      ];
-      // pick the first fallback — backend should 302 to Spotify auth
-      window.location.href = `${API_BASE}${fallbacks[0]}`;
-    } catch (e: any) {
-      setSpotifyError("Couldn't start Spotify connection. Check API URL and endpoint wiring.");
-      setSpotifyBusy(false);
-    }
-  };
+    // this matches your Django urlpattern: path("auth/spotify/login", spotify_login, ...)
+    window.location.assign(`${API_BASE}/auth/spotify/login`);
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
@@ -106,7 +80,7 @@ export const AuthScreen = () => {
 
               {/* Connect Spotify */}
               <Button
-                onClick={handleConnectSpotify}
+                onClick={connectSpotify}
                 disabled={spotifyBusy}
                 className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-neutral-900"
               >
