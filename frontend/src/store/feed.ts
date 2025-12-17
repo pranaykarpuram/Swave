@@ -7,8 +7,9 @@ interface FeedState {
   loading: boolean;
   error: string | null;
   fetchIfLow: () => Promise<void>;
-  consumeTop: (onSwipe: (track: Track) => void) => void;
+  consumeTop: (onSwipe: (track: Track) => Promise<void> | void) => Promise<void>;
   reset: () => void;
+  setExternalQueue: (tracks: Track[]) => void;
 }
 
 const MIN_QUEUE_SIZE = 3;
@@ -17,16 +18,13 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   queue: [],
   loading: false,
   error: null,
-  
+
   fetchIfLow: async () => {
     const { queue, loading } = get();
-    
-    if (loading || queue.length >= MIN_QUEUE_SIZE) {
-      return;
-    }
-    
+    if (loading || queue.length >= MIN_QUEUE_SIZE) return;
+
     set({ loading: true, error: null });
-    
+
     try {
       const response = await api.feed.getNext();
       set((state) => ({
@@ -36,25 +34,37 @@ export const useFeedStore = create<FeedState>((set, get) => ({
     } catch (error) {
       set({
         loading: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch tracks',
+        error:
+          error instanceof Error ? error.message : 'Failed to fetch tracks',
       });
     }
   },
-  
-  consumeTop: (onSwipe) => {
+
+  consumeTop: async (onSwipe) => {
     const { queue } = get();
-    
     if (queue.length === 0) return;
-    
+
     const [top, ...rest] = queue;
-    onSwipe(top);
+
+    // run caller’s handler (save swipe, toast, etc.)
+    await onSwipe(top);
+
+    // drop top track from queue
     set({ queue: rest });
-    
-    // Automatically fetch more if running low
+
+    // auto-refill if we’re running low
     if (rest.length < MIN_QUEUE_SIZE) {
-      get().fetchIfLow();
+      await get().fetchIfLow();
     }
   },
-  
+
   reset: () => set({ queue: [], loading: false, error: null }),
+
+  setExternalQueue: (tracks) => {
+    set({
+      queue: tracks,
+      loading: false,
+      error: null,
+    });
+  },
 }));

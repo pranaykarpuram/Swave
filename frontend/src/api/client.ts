@@ -227,7 +227,7 @@ export const api = {
         batch_id: null,
       });
   
-      const res = await makeAuthenticatedRequest(`/api/event/swipe`, {
+      const res = await makeAuthenticatedRequest(`/api/event/swipe/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,

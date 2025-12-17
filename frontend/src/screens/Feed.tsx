@@ -15,6 +15,15 @@ export const Feed = () => {
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
+  const [swipeCount, setSwipeCount] = useState(0);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [playlistData, setPlaylistData] = useState<any | null>(null);
+
+  const API_BASE =
+  (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8000';
+
+
 
   const handleLogout = async () => {
     try {
@@ -27,8 +36,11 @@ export const Feed = () => {
   };
 
   useEffect(() => {
-    fetchIfLow();
-  }, [fetchIfLow]);
+    if (!isDemoMode && !user) return;
+    if (queue.length === 0) fetchIfLow();
+  }, [fetchIfLow, queue.length, user, isDemoMode]);
+
+
 
   const handlePlayPreview = useCallback((url: string | null) => {
     // Stop current audio
@@ -83,6 +95,27 @@ export const Feed = () => {
     };
   }, [toast]);
 
+  const handleGeneratePlaylist = async () => {
+    setPlaylistBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/playlist/daily/build/`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
+      const data = await res.json();
+
+      setPlaylistData(data);
+      setPlaylistOpen(true);
+    } catch (e: any) {
+      toast(e?.message || 'Failed to generate playlist');
+    } finally {
+      setPlaylistBusy(false);
+    }
+  };
+
+
+
   const handlePlayPause = () => {
     if (!audioRef.current) return;
 
@@ -98,6 +131,7 @@ export const Feed = () => {
   const handleSwipe = async (type: 'like' | 'reject') => {
     consumeTop(async (track) => {
       await api.events.save(track.id, type);
+      setSwipeCount((c) => c + 1);
       toast(type === 'like' ? '❤️ Liked!' : '✕ Passed');
     });
   };
@@ -179,6 +213,50 @@ export const Feed = () => {
           </div>
         ))}
       </div>
+
+      {swipeCount >= 10 && (
+      <div className="p-4 flex justify-center">
+        <Button onClick={handleGeneratePlaylist} disabled={playlistBusy}>
+          {playlistBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          Generate Playlist
+        </Button>
+      </div>
+    )}
+
+      {playlistOpen && playlistData && (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="w-full max-w-md rounded-2xl bg-card border border-border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Playlist created ✅</h3>
+            <p className="text-sm text-muted-foreground">{playlistData.name}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setPlaylistOpen(false)}>
+            Close
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-2 max-h-72 overflow-y-auto">
+          {(playlistData.items || []).map((it: any) => (
+            <div key={it.id} className="flex items-center gap-3 rounded-xl bg-muted/30 p-2">
+              <img
+                src={it.track?.album_art_url || ''}
+                className="w-10 h-10 rounded-lg object-cover"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{it.track?.title}</div>
+                <div className="text-xs text-muted-foreground truncate">{it.track?.artist}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
+  )}
+
+
+    </div>
+    
+    
   );
 };

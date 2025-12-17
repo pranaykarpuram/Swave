@@ -1,4 +1,5 @@
 from django.urls import path
+from music import views
 from .views import (
     test_itunes,
     register,
@@ -48,9 +49,13 @@ urlpatterns = [
     path("playlist/daily/build/", build_daily_playlist),
     path("playlist/daily/", get_daily_playlist),
 
-    # Track feed for each user
+    
     path("api/feed/next", feed_next),
+    path("api/feed/next/", feed_next),
+
     path("api/event/swipe", swipe_event),
+    path("api/event/swipe/", swipe_event),
+
 
     # spotify
     path("auth/spotify/login", spotify_login, name="spotify_login"),
@@ -59,6 +64,13 @@ urlpatterns = [
     path("spotify/test-playlist/", spotify_test_playlist),
     path("spotify/test-playlist-browser/", spotify_test_playlist_browser),
     path("api/spotify/liked-debug", spotify_likes_debug, name="spotify_likes_debug"),
+    path("api/spotify/recommend-next", views.spotify_recommend_next),
 
 ]
+from django.http import JsonResponse
+
+def __ping(request):
+    return JsonResponse({"ok": True, "loaded": "music.urls"})
+urlpatterns += [path("__ping__", __ping)]
+
 

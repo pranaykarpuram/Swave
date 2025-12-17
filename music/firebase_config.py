@@ -36,7 +36,7 @@ def _init_firebase_admin_if_available() -> bool:
 FIREBASE_ADMIN_READY = _init_firebase_admin_if_available()
 
 
-def verify_firebase_token(id_token: str) -> dict | None:
+def verify_firebase_token(id_token: str):
     """Verify Firebase ID token and return decoded payload, or None if invalid."""
     if not FIREBASE_ADMIN_READY:
         return None

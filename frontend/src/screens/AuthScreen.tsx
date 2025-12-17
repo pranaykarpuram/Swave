@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { LoginForm } from '@/components/auth/LoginForm';
-import { RegisterForm } from '@/components/auth/RegisterForm';
 import { Button } from '@/components/ui/button';
 import { Loader2, Play, Music2 } from 'lucide-react';
 
@@ -59,11 +57,6 @@ export const AuthScreen = () => {
           </div>
         ) : (
           <>
-            {mode === 'login' ? (
-              <LoginForm onSwitchToRegister={() => switchMode('register')} />
-            ) : (
-              <RegisterForm onSwitchToLogin={() => switchMode('login')} />
-            )}
 
             {/* Divider */}
             <div className="mt-6">
@@ -89,7 +82,7 @@ export const AuthScreen = () => {
                 ) : (
                   <Music2 className="w-4 h-4 mr-2" />
                 )}
-                {spotifyBusy ? 'Opening Spotify…' : 'Connect with Spotify'}
+                {spotifyBusy ? 'Opening Spotify…' : 'Login with Spotify'}
               </Button>
               {spotifyError && (
                 <p className="text-xs text-red-300 mt-2 text-center">{spotifyError}</p>

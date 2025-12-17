@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Music2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useFeedStore } from '@/store/feed';
+import { useNavigate } from 'react-router-dom';
+import type { Track } from '@/api/types';
+import { useAuthStore } from '@/store/auth';
+
+
 
 const API_BASE =
   (import.meta as any).env?.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -38,12 +44,29 @@ type MetaFeature = {
   label_score: number | null;
 };
 
+type RecommendedTrack = {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  album_art_url: string | null;
+  preview_url: string | null;
+  similarity: number;
+};
+
 export const ConnectSpotify = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tracks, setTracks] = useState<LikedTrack[]>([]);
   const [features, setFeatures] = useState<MetaFeature[]>([]);
+  const [recommended, setRecommended] = useState<RecommendedTrack[]>([]);
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoError, setRecoError] = useState<string | null>(null);
+  const loadProfile = useAuthStore((s) => s.loadProfile);
+
+
+  const setExternalQueue = useFeedStore((s) => s.setExternalQueue);
+  const navigate = useNavigate();
 
   const loadLikes = async () => {
     setLoading(true);
@@ -82,6 +105,53 @@ export const ConnectSpotify = () => {
     }
   };
 
+    const loadRecommendations = async () => {
+    setRecoLoading(true);
+    setRecoError(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/spotify/recommend-next`, {
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(
+          `Failed to load recommendations (${res.status}): ${text}`,
+        );
+      }
+
+      const data = await res.json();
+      const recs: RecommendedTrack[] = data.recommendations || [];
+      setRecommended(recs);
+
+      // Transform recommendations into feed-compatible Track objects
+      const feedTracks: Track[] = recs.map((t) => ({
+        id: t.id,
+        title: t.title ?? 'Unknown title',
+        artist: t.artist ?? 'Unknown artist',
+        album: '', // no album name from backend yet
+        artworkUrl: t.album_art_url ?? '',
+        previewUrl: t.preview_url ?? null,
+        reasons: [], // optional; SwipeCard reads track.reasons
+      }));
+
+      // Inject them into the feed store
+      setExternalQueue(feedTracks);
+
+
+      await loadProfile().catch(() => {});
+      navigate('/');
+
+    } catch (err: any) {
+      setRecoError(err?.message || 'Failed to load recommendations');
+      setRecommended([]);
+    } finally {
+      setRecoLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     syncAndLoad();
   }, []);
@@ -91,7 +161,7 @@ export const ConnectSpotify = () => {
       acc[feat.id] = feat;
       return acc;
     },
-    {}
+    {},
   );
 
   const formatDuration = (ms?: number | null) => {
@@ -108,6 +178,7 @@ export const ConnectSpotify = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl bg-black/30 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-xl">
+        {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center">
             <Music2 className="w-6 h-6 text-neutral-900" />
@@ -123,8 +194,8 @@ export const ConnectSpotify = () => {
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="flex gap-3 mb-4">
+        {/* Controls (single block) */}
+        <div className="flex flex-wrap gap-3 mb-4">
           <Button
             onClick={syncAndLoad}
             disabled={syncing}
@@ -150,9 +221,26 @@ export const ConnectSpotify = () => {
           >
             Refresh view
           </Button>
+
+          <Button
+            onClick={loadRecommendations}
+            variant="outline"
+            disabled={recoLoading}
+            className="border-purple-300 text-purple-100 hover:bg-purple-500/20"
+          >
+            {recoLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Getting recs…
+              </>
+            ) : (
+              <>Get personalized recommendations</>
+            )}
+          </Button>
         </div>
 
-        {error && <p className="text-sm text-red-300 mb-3">{error}</p>}
+        {error && <p className="text-sm text-red-300 mb-1">{error}</p>}
+        {recoError && <p className="text-sm text-red-300 mb-3">{recoError}</p>}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -305,7 +393,7 @@ export const ConnectSpotify = () => {
                   </div>
                 </div>
 
-                {/* Simple list of liked songs (sample) */}
+                {/* Liked songs list */}
                 <div>
                   <h2 className="text-sm font-semibold text-white mb-2">
                     Liked songs (first {Math.min(20, tracks.length)})
@@ -345,6 +433,73 @@ export const ConnectSpotify = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* New: Recommendations based on your vibe */}
+                <div>
+                  <h2 className="text-sm font-semibold text-white mb-2 mt-4">
+                    Swave picks for you (top {recommended.length || 0})
+                  </h2>
+
+                  {recoLoading && (
+                    <div className="flex items-center gap-2 text-blue-100 text-sm mb-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Scoring your next tracks…</span>
+                    </div>
+                  )}
+
+                  {recommended.length === 0 && !recoLoading ? (
+                    <p className="text-xs text-blue-200">
+                      Hit “Get personalized recommendations” to see your next
+                      songs.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {recommended.map((track) => (
+                        <div
+                          key={track.id}
+                          className="flex items-center gap-3 rounded-xl bg-emerald-500/5 border border-emerald-300/40 px-3 py-2"
+                        >
+                          {track.album_art_url ? (
+                            <img
+                              src={track.album_art_url}
+                              alt={track.title ?? 'Album art'}
+                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                              <Music2 className="w-5 h-5 text-emerald-200" />
+                            </div>
+                          )}
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white truncate">
+                              {track.title ?? 'Unknown title'}
+                            </p>
+                            <p className="text-[11px] text-emerald-200 truncate">
+                              {track.artist ?? 'Unknown artist'}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] text-emerald-300 font-semibold">
+                              match {(track.similarity * 100).toFixed(1)}%
+                            </span>
+
+                            {track.preview_url && (
+                              <audio
+                                controls
+                                className="w-24"
+                                preload="none"
+                              >
+                                <source src={track.preview_url} />
+                              </audio>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}
